@@ -97,6 +97,12 @@ SOURCES: list[tuple[str, str, str]] = [
      "https://api.frankfurter.dev/v1/1999-01-04..2024-12-31"
      "?base=USD&symbols=KRW"),
 
+    # ECB 는 1999-01-04 부터만 있다. 원/100엔은 KRW ÷ JPY × 100 으로 계산한다 (교차환율)
+    ("jpykrw.json",
+     "유로 대비 엔·원 환율 1999~2026-10-30 (Frankfurter · ECB) — 원/100엔 계산용",
+     "https://api.frankfurter.dev/v1/1999-01-04..2026-10-30"
+     "?symbols=JPY,KRW"),
+
     ("wb_countries.json",
      "World Bank 국가 목록 — 대륙·소득군 같은 집계치를 걸러내는 데 씁니다",
      "https://api.worldbank.org/v2/country?format=json&per_page=400"),
@@ -158,20 +164,38 @@ def get(url: str, dest: Path, tries: int = 4) -> int:
     raise RuntimeError("도달 불가")
 
 
-# 한국은행 ECOS — DRAM 수출물가지수 (402Y016 · 30911201AA · 달러기준 D)
+# 한국은행 ECOS
 # 키 없이 쓰는 'sample' 키는 **한 번에 10건까지**만 준다. 그래서 잘라서 여러 번 받는다.
 # 발급받은 키가 있으면 환경변수 ECOS_API_KEY 로 넣는다 (키는 저장소에 적지 않는다).
-ECOS = ("ecos_dram.json",
-        "DRAM 수출물가지수 연간 2005~2025 · 월간 2014.01~ (한국은행 ECOS · 달러기준)")
+def monthly(y0: int, y1: int, last: str | None = None) -> list[tuple[str, str, str]]:
+    """y0년 1월 ~ y1년 12월(또는 last 'YYYYMM')을 10건씩 자른 월간 구간."""
+    out = []
+    for y in range(y0, y1 + 1):
+        out += [("M", f"{y}01", f"{y}10"), ("M", f"{y}11", f"{y}12")]
+    if last:
+        out = [(c, a, min(b, last)) for c, a, b in out if a <= last]
+    return out
 
 
-def ecos_dram(dest: Path) -> int:
+ECOS: list[tuple[str, str, str, str, list[tuple[str, str, str]]]] = [
+    # (저장 파일명, 설명, 통계표, 항목 코드, [(주기, 시작, 끝), ...])
+    ("ecos_dram.json",
+     "DRAM 수출물가지수 연간 2005~2025 · 월간 2014.01~ (한국은행 ECOS · 달러기준)",
+     "402Y016", "30911201AA/D",
+     [("A", "2005", "2014"), ("A", "2015", "2024"), ("A", "2025", "2025")]
+     + monthly(2014, time.localtime().tm_year)),
+
+    # KB 지수는 기준월(지금 2026.01=100)이 바뀔 수 있다. 바뀌면 같은 구간을 받아도 값이 달라진다
+    ("ecos_seoul_apt.json",
+     "KB 주택매매가격지수 아파트(서울) 월간 1986.01~2026.10 (한국은행 ECOS 901Y062)",
+     "901Y062", "P63ACA",
+     monthly(1986, 2026, last="202610")),
+]
+
+
+def ecos(dest: Path, table: str, item: str, ranges: list[tuple[str, str, str]]) -> int:
     key = os.environ.get("ECOS_API_KEY", "sample")
-    base = f"https://ecos.bok.or.kr/api/StatisticSearch/{key}/json/kr/1/10/402Y016"
-    item = "30911201AA/D"
-    ranges = [("A", "2005", "2014"), ("A", "2015", "2024"), ("A", "2025", "2025")]
-    for y in range(2014, time.localtime().tm_year + 1):
-        ranges += [("M", f"{y}01", f"{y}10"), ("M", f"{y}11", f"{y}12")]
+    base = f"https://ecos.bok.or.kr/api/StatisticSearch/{key}/json/kr/1/10/{table}"
     rows = []
     tmp = dest.with_suffix(".part")
     for cycle, a, b in ranges:
@@ -205,21 +229,21 @@ def main() -> int:
             fail += 1
         time.sleep(0.4)          # 상대 서버에 예의를 지킨다
 
-    name, desc = ECOS
-    dest = RAW / name
-    if dest.exists() and not force:
-        print(f"  건너뜀  {name:<22} 이미 있음 ({dest.stat().st_size/1024:,.0f}KB)")
-    else:
+    for name, desc, table, item, ranges in ECOS:
+        dest = RAW / name
+        if dest.exists() and not force:
+            print(f"  건너뜀  {name:<22} 이미 있음 ({dest.stat().st_size/1024:,.0f}KB)")
+            continue
         t0 = time.time()
         try:
-            n = ecos_dram(dest)
+            n = ecos(dest, table, item, ranges)
             print(f"  받음    {name:<22} {n/1024:>7,.0f}KB  {time.time()-t0:.1f}s  {desc}")
         except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as e:
             print(f"  실패    {name:<22} {e}")
             fail += 1
 
     print()
-    print(f"총 {len(SOURCES) + 1}건 / 실패 {fail}건 · 저장 위치 {RAW}")
+    print(f"총 {len(SOURCES) + len(ECOS)}건 / 실패 {fail}건 · 저장 위치 {RAW}")
     if fail:
         print("실패한 것은 잠시 뒤 다시 실행하면 대개 받아집니다.")
     return 1 if fail else 0

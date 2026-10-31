@@ -84,6 +84,133 @@ def choice(qid, text, options, answer, basis, why):
             "answer": answer, "basis": basis, "why": why}
 
 
+def write_pack(t):
+    """topics/<id>.json 을 쓰고, topics.json 목록에 넣을 한 줄을 돌려준다."""
+    pack = {k: t[k] for k in ("id", "emoji", "title", "blurb",
+                              "source", "source_url", "caveat")}
+    pack["questions"] = t["questions"]
+    io.open(OUT / f"{t['id']}.json", "w", encoding="utf-8").write(
+        json.dumps(pack, ensure_ascii=False, indent=2))
+    return {k: t[k] for k in ("id", "emoji", "title", "blurb", "source")}
+
+
+# ── 12. DRAM 가격 ────────────────────────────────────────────────
+# 한국은행 수출물가지수(품목별) DRAM · 달러기준. DRAM 은 달러로 거래되므로
+# 원화기준을 쓰면 환율 변화가 섞인다.
+# 세는 방법 — 연 단위(d1·d2·d5)는 ECOS 연간 값(그 해 월평균)을 전년과 비교한다.
+#            d4 는 최대 낙폭: 매달을 그때까지의 최고치와 비교한 하락률 중 가장 큰 값.
+#            (구간 최고점은 마지막 달이라 '최고점 뒤 최저점'으로 세면 0%가 된다)
+def dram():
+    rows = load_json("ecos_dram.json")["row"]
+    A = {int(r["TIME"]): float(r["DATA_VALUE"]) for r in rows if len(r["TIME"]) == 4}
+    M = {r["TIME"][:4] + "-" + r["TIME"][4:]: float(r["DATA_VALUE"])
+         for r in rows if len(r["TIME"]) == 6}
+    ms = sorted(M)
+    # 원본 점검 — 빠진 달이 없고, 연간 값이 그 해 월평균과 같은지
+    for a, b in zip(ms, ms[1:]):
+        ya, ma = map(int, a.split("-"))
+        yb, mb = map(int, b.split("-"))
+        assert yb * 12 + mb - (ya * 12 + ma) == 1, f"DRAM 월 누락: {a} → {b}"
+    for y, v in A.items():
+        vs = [M[k] for k in ms if k.startswith(f"{y}-")]
+        if len(vs) == 12:
+            assert abs(mean(vs) - v) / v < 0.005, f"DRAM {y} 연간 ≠ 월평균"
+
+    last_y = max(A)                                  # 연간 값이 있는 마지막 해
+    yrs = list(range(last_y - 9, last_y + 1))
+    yoy = {y: (A[y] / A[y - 1] - 1) * 100 for y in yrs}
+    up = max(yoy, key=yoy.get)
+    down = min(yoy, key=yoy.get)
+    ups = [y for y in yrs if yoy[y] > 0]
+
+    now = ms[-1]
+    prev = f"{int(now[:4]) - 1}{now[4:]}"
+    r1y = (M[now] / M[prev] - 1) * 100
+
+    win = ms[-120:]
+    peak, dd = win[0], (win[0], win[0], 0.0)
+    for k in win:
+        if M[k] > M[peak]:
+            peak = k
+        if (M[k] / M[peak] - 1) * 100 < dd[2]:
+            dd = (peak, k, (M[k] / M[peak] - 1) * 100)
+
+    def ym(k):
+        return f"{k[:4]}년 {int(k[5:])}월"
+
+    span = f"{yrs[0]}~{last_y}년"
+    idx = "ECOS DRAM 수출물가지수(달러기준, 2020=100)"
+    topic(
+        "dram", "💾", "DRAM 가격 언제까지 변할까?",
+        f"한국은행 DRAM 수출물가지수 {yrs[0]}~{now[:4]}",
+        "한국은행 ECOS 수출물가지수(품목별) DRAM · 달러기준 (2020=100)",
+        "https://ecos.bok.or.kr/",
+        [
+            slider("d1", f"최근 10년({span}) 중 DRAM 수출가격이 전년보다 가장 많이 "
+                   "오른 해, 상승률은 몇 %였을까요?",
+                   yoy[up], "%", 0, 100, 1,
+                   f"{span} {idx}의 연평균을 해마다 전년과 비교해 (그 해 ÷ 전년 − 1) × 100 이 "
+                   f"가장 큰 해를 골랐고, {up}년 {A[up - 1]:.2f} → {A[up]:.2f} 입니다.",
+                   "가격이 크게 오른 해는 뉴스로 기억되지만, 몇 %였는지는 잘 남지 않습니다."),
+            slider("d2", "같은 10년 동안 DRAM 수출가격이 가장 크게 떨어진 해, "
+                   "하락률은 몇 %였을까요?",
+                   -yoy[down], "%", 0, 100, 1,
+                   f"{span} {idx}의 연평균을 해마다 전년과 비교해 (그 해 ÷ 전년 − 1) × 100 이 "
+                   f"가장 작은 해를 골라 하락 폭을 양수로 적었고, {down}년 "
+                   f"{A[down - 1]:.2f} → {A[down]:.2f} 입니다.",
+                   "반도체는 오를 때만큼 크게 떨어집니다. 한 해에 절반 가까이 빠지기도 합니다."),
+            slider("d3", f"최근 1년({ym(prev)} → {ym(now)}) 동안 DRAM 수출가격은 "
+                   "몇 % 올랐을까요?",
+                   r1y, "%", 0, 400, 10,
+                   f"{idx}의 {ym(prev)}과 {ym(now)} 월별 값 {M[prev]:.2f} → {M[now]:.2f} 를 "
+                   "(나중 ÷ 처음 − 1) × 100 으로 비교했습니다.",
+                   "최근 값은 체감보다 훨씬 크게 움직였을 수 있습니다. 최근 몇 달은 "
+                   "잠정치라 나중에 고쳐질 수 있습니다."),
+            slider("d4", f"최근 10년({ym(win[0])}~{ym(now)}) 월별 지수에서, 고점을 찍은 뒤 "
+                   "가장 크게 떨어졌을 때 하락률은 몇 %였을까요?",
+                   -dd[2], "%", 0, 100, 1,
+                   f"{ym(win[0])}~{ym(now)} {idx} 월별 값 {len(win)}개에서 매달을 그때까지의 "
+                   f"최고치와 비교한 하락률 중 가장 큰 값으로, {ym(dd[0])} {M[dd[0]]:.2f} → "
+                   f"{ym(dd[1])} {M[dd[1]]:.2f} 입니다.",
+                   "연평균으로 보면 가려지는 낙폭이 월별로 보면 드러납니다."),
+            slider("d5", f"{span} 10년 가운데, DRAM 수출가격이 전년보다 오른 해는 "
+                   "몇 번일까요?",
+                   len(ups), "번", 0, 10, 1,
+                   f"{span} {idx}의 연평균을 해마다 전년과 비교해 오른 해를 셌고, "
+                   f"{', '.join(map(str, ups))}년입니다.",
+                   "'반도체는 계속 오른다'는 인상과 달리, 오르고 내리기를 반복합니다."),
+        ],
+        caveat="수출물가지수는 국내 기업이 수출하는 DRAM의 계약 가격을 지수로 만든 "
+               "값이라 시장 현물가격과 다를 수 있습니다. 달러기준이라 환율 효과는 빠져 "
+               "있고, 최근 몇 달 값은 잠정치입니다.")
+
+
+# ── 한 주제만 다시 쓰기 ──────────────────────────────────────────
+#   python tools/build_topics.py --only dram
+# 다른 주제는 계산하지 않는다. topics/<id>.json 과 topics.json 목록의 그 줄만 바꾼다.
+# (정답지.md 는 전체를 돌릴 때만 갱신된다)
+ONLY = {"dram": dram}
+if "--only" in sys.argv:
+    tid = sys.argv[sys.argv.index("--only") + 1]
+    ONLY[tid]()
+    t = TOPICS[-1]
+    assert len(t["questions"]) == 5, f"{tid}: 문항이 5개가 아닙니다"
+    OUT.mkdir(parents=True, exist_ok=True)
+    line = write_pack(t)
+    idx_path = APP / "topics.json"
+    index = json.load(io.open(idx_path, encoding="utf-8"))
+    ids = [x["id"] for x in index["topics"]]
+    if tid in ids:
+        index["topics"][ids.index(tid)] = line
+    else:
+        index["topics"].append(line)
+    io.open(idx_path, "w", encoding="utf-8").write(
+        json.dumps(index, ensure_ascii=False, indent=2))
+    for q in t["questions"]:
+        print(f"{q['id']}  {q['answer']}{q['unit']}  | {q['text']}\n    근거: {q['basis']}")
+    sys.exit(0)
+
+
 # ════════════════════════════════════════════════════════════════
 # 기상 공통
 # ════════════════════════════════════════════════════════════════
@@ -694,87 +821,8 @@ topic(
     ])
 
 # ── 12. DRAM 가격 ────────────────────────────────────────────────
-# 한국은행 수출물가지수(품목별) DRAM · 달러기준. DRAM 은 달러로 거래되므로
-# 원화기준을 쓰면 환율 변화가 섞인다. 연간 값은 월평균이라 둘이 맞는지 먼저 확인한다.
-_er = load_json("ecos_dram.json")["row"]
-DA = {int(r["TIME"]): float(r["DATA_VALUE"]) for r in _er if len(r["TIME"]) == 4}
-DM = {r["TIME"][:4] + "-" + r["TIME"][4:]: float(r["DATA_VALUE"])
-      for r in _er if len(r["TIME"]) == 6}
-dms = sorted(DM)
-for _a, _b in zip(dms, dms[1:]):
-    _ya, _ma = map(int, _a.split("-"))
-    _yb, _mb = map(int, _b.split("-"))
-    assert _yb * 12 + _mb - (_ya * 12 + _ma) == 1, f"DRAM 월 누락: {_a} → {_b}"
-for _y, _v in DA.items():
-    _ms = [DM[k] for k in dms if k.startswith(f"{_y}-")]
-    if len(_ms) == 12:
-        assert abs(mean(_ms) - _v) / _v < 0.005, f"DRAM {_y} 연간 ≠ 월평균"
-
-d_last_y = max(DA)                               # 연간 값이 있는 마지막 해
-d_years = list(range(d_last_y - 9, d_last_y + 1))
-d_yoy = {y: (DA[y] / DA[y - 1] - 1) * 100 for y in d_years}
-d_up = max(d_yoy, key=d_yoy.get)
-d_down = min(d_yoy, key=d_yoy.get)
-d_ups = [y for y in d_years if d_yoy[y] > 0]
-d_yoy_txt = " · ".join(f"{y} {d_yoy[y]:+.1f}%" for y in d_years)
-
-d_now = dms[-1]
-d_prev = f"{int(d_now[:4]) - 1}{d_now[4:]}"
-d_1y = (DM[d_now] / DM[d_prev] - 1) * 100
-
-# 최근 120개월 안에서 고점 대비 가장 크게 떨어진 폭 (최대 낙폭)
-d_win = dms[-120:]
-_peak, d_dd = d_win[0], (d_win[0], d_win[0], 0.0)
-for k in d_win:
-    if DM[k] > DM[_peak]:
-        _peak = k
-    if (DM[k] / DM[_peak] - 1) * 100 < d_dd[2]:
-        d_dd = (_peak, k, (DM[k] / DM[_peak] - 1) * 100)
-
-
-def ym(k):
-    return f"{k[:4]}년 {int(k[5:])}월"
-
-
-topic(
-    "dram", "💾", "DRAM 가격 언제까지 변할까?",
-    f"한국은행 DRAM 수출물가지수 {d_years[0]}~{d_now[:4]}",
-    "한국은행 ECOS 수출물가지수(품목별) DRAM · 달러기준 (2020=100)",
-    "https://ecos.bok.or.kr/",
-    [
-        slider("d1", f"{d_years[0]}~{d_last_y}년 중 DRAM 가격이 전년보다 가장 많이 "
-               "오른 해, 상승률은 몇 %였을까요?",
-               d_yoy[d_up], "%", 0, 100, 1,
-               f"{d_up}년 연평균 지수 {DA[d_up - 1]:.2f} → {DA[d_up]:.2f}. "
-               f"연도별 전년 대비: {d_yoy_txt}",
-               "가격이 크게 오른 해는 뉴스로 기억되지만, 몇 %였는지는 잘 남지 않습니다."),
-        slider("d2", "같은 10년 동안 가장 크게 떨어진 해, 하락률은 몇 %였을까요?",
-               -d_yoy[d_down], "%", 0, 100, 1,
-               f"{d_down}년 연평균 지수 {DA[d_down - 1]:.2f} → {DA[d_down]:.2f} "
-               f"(하락 폭을 양수로 표시). 연도별 전년 대비: {d_yoy_txt}",
-               "반도체는 오를 때만큼 크게 떨어집니다. 한 해에 절반 가까이 빠지기도 합니다."),
-        slider("d3", f"최근 1년({ym(d_prev)} → {ym(d_now)}) DRAM 가격은 몇 % "
-               "올랐을까요?",
-               d_1y, "%", 0, 400, 10,
-               f"월별 지수 {DM[d_prev]:.2f} → {DM[d_now]:.2f}",
-               "최근 값은 체감보다 훨씬 크게 움직였을 수 있습니다. 최근 몇 달은 "
-               "잠정치라 나중에 고쳐질 수 있습니다."),
-        slider("d4", f"최근 10년({ym(d_win[0])}~{ym(d_now)}) 월별로 보면, 고점에서 "
-               "저점까지 가장 크게 떨어진 비율은?",
-               -d_dd[2], "%", 0, 100, 1,
-               f"{ym(d_dd[0])} 고점 {DM[d_dd[0]]:.2f} → {ym(d_dd[1])} 저점 "
-               f"{DM[d_dd[1]]:.2f}. 월별 지수 120개월에서 각 달을 그 전까지의 "
-               "최고치와 비교한 하락률 중 가장 큰 값",
-               "연평균으로 보면 가려지는 낙폭이 월별로 보면 드러납니다."),
-        slider("d5", f"{d_years[0]}~{d_last_y}년 10년 가운데 DRAM 가격이 전년보다 "
-               "오른 해는 몇 번일까요?",
-               len(d_ups), "번", 0, 10, 1,
-               f"오른 해 {', '.join(map(str, d_ups))}. 연도별 전년 대비: {d_yoy_txt}",
-               "'반도체는 계속 오른다'는 인상과 달리, 오르고 내리기를 반복합니다."),
-    ],
-    caveat="수출물가지수는 국내 기업이 수출하는 DRAM의 계약 가격을 지수로 만든 "
-           "값이라 시장 현물가격과 다를 수 있습니다. 달러기준이라 환율 효과는 빠져 "
-           "있고, 최근 몇 달 값은 잠정치입니다.")
+# 계산은 위쪽 dram() 에 있다 (--only dram 으로 이 주제만 다시 쓸 수 있게)
+dram()
 
 
 # ════════════════════════════════════════════════════════════════
@@ -783,13 +831,7 @@ def main() -> None:
     index = []
     for t in TOPICS:
         assert len(t["questions"]) == 5, f"{t['id']}: 문항이 5개가 아닙니다"
-        pack = {k: t[k] for k in ("id", "emoji", "title", "blurb",
-                                  "source", "source_url", "caveat")}
-        pack["questions"] = t["questions"]
-        io.open(OUT / f"{t['id']}.json", "w", encoding="utf-8").write(
-            json.dumps(pack, ensure_ascii=False, indent=2))
-        index.append({k: t[k] for k in ("id", "emoji", "title", "blurb",
-                                        "source")})
+        index.append(write_pack(t))
 
     # 제목·부제는 화면을 바꾸며 고친 값을 지킨다 (2장에서 내 제목으로 바꾼다).
     # 다시 계산해도 내 제목이 «감 테스트»로 돌아가지 않게, 있던 값을 읽어 쓴다

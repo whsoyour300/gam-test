@@ -14,6 +14,8 @@
 from __future__ import annotations
 
 import http.client
+import json
+import os
 import sys
 import time
 import urllib.error
@@ -156,6 +158,35 @@ def get(url: str, dest: Path, tries: int = 4) -> int:
     raise RuntimeError("도달 불가")
 
 
+# 한국은행 ECOS — DRAM 수출물가지수 (402Y016 · 30911201AA · 달러기준 D)
+# 키 없이 쓰는 'sample' 키는 **한 번에 10건까지**만 준다. 그래서 잘라서 여러 번 받는다.
+# 발급받은 키가 있으면 환경변수 ECOS_API_KEY 로 넣는다 (키는 저장소에 적지 않는다).
+ECOS = ("ecos_dram.json",
+        "DRAM 수출물가지수 연간 2005~2025 · 월간 2014.01~ (한국은행 ECOS · 달러기준)")
+
+
+def ecos_dram(dest: Path) -> int:
+    key = os.environ.get("ECOS_API_KEY", "sample")
+    base = f"https://ecos.bok.or.kr/api/StatisticSearch/{key}/json/kr/1/10/402Y016"
+    item = "30911201AA/D"
+    ranges = [("A", "2005", "2014"), ("A", "2015", "2024"), ("A", "2025", "2025")]
+    for y in range(2014, time.localtime().tm_year + 1):
+        ranges += [("M", f"{y}01", f"{y}10"), ("M", f"{y}11", f"{y}12")]
+    rows = []
+    tmp = dest.with_suffix(".part")
+    for cycle, a, b in ranges:
+        get(f"{base}/{cycle}/{a}/{b}/{item}", tmp)
+        body = json.loads(tmp.read_text(encoding="utf-8"))
+        rows += body.get("StatisticSearch", {}).get("row", [])
+        time.sleep(0.2)
+    tmp.unlink(missing_ok=True)
+    if not rows:
+        raise urllib.error.URLError("ECOS 응답에 값이 없습니다")
+    data = json.dumps({"row": rows}, ensure_ascii=False).encode("utf-8")
+    dest.write_bytes(data)
+    return len(data)
+
+
 def main() -> int:
     force = "--force" in sys.argv
     RAW.mkdir(parents=True, exist_ok=True)
@@ -174,8 +205,21 @@ def main() -> int:
             fail += 1
         time.sleep(0.4)          # 상대 서버에 예의를 지킨다
 
+    name, desc = ECOS
+    dest = RAW / name
+    if dest.exists() and not force:
+        print(f"  건너뜀  {name:<22} 이미 있음 ({dest.stat().st_size/1024:,.0f}KB)")
+    else:
+        t0 = time.time()
+        try:
+            n = ecos_dram(dest)
+            print(f"  받음    {name:<22} {n/1024:>7,.0f}KB  {time.time()-t0:.1f}s  {desc}")
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as e:
+            print(f"  실패    {name:<22} {e}")
+            fail += 1
+
     print()
-    print(f"총 {len(SOURCES)}건 / 실패 {fail}건 · 저장 위치 {RAW}")
+    print(f"총 {len(SOURCES) + 1}건 / 실패 {fail}건 · 저장 위치 {RAW}")
     if fail:
         print("실패한 것은 잠시 뒤 다시 실행하면 대개 받아집니다.")
     return 1 if fail else 0

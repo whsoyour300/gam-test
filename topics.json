@@ -127,6 +127,13 @@
       "title": "얼마나 오래 사나",
       "blurb": "나라별 기대수명 1950~현재",
       "source": "Our World in Data"
+    },
+    {
+      "id": "dram",
+      "emoji": "💾",
+      "title": "DRAM 가격 언제까지 변할까?",
+      "blurb": "한국은행 DRAM 수출물가지수 2016~2026",
+      "source": "한국은행 ECOS 수출물가지수(품목별) DRAM · 달러기준 (2020=100)"
     }
   ]
 }

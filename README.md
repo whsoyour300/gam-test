@@ -55,7 +55,7 @@ python -m http.server 8000      # index.html 을 더블클릭하면 안 됩니�
 | `tools/fetch_all.py` | 공개 데이터 내려받기 (배포 제외) |
 | `tools/build_topics.py` | 원본 → 문항 계산 (배포 제외) |
 
-## 주제 11개
+## 주제 12개
 
 | | 주제 | 출처 |
 |---|---|---|
@@ -70,6 +70,7 @@ python -m http.server 8000      # index.html 을 더블클릭하면 안 됩니�
 | 🏙️ | 서울·도쿄·런던·싱가포르 | Open-Meteo Archive (ERA5) |
 | 🌎 | 지진은 얼마나 자주 | USGS |
 | 🩺 | 얼마나 오래 사나 | Our World in Data |
+| 💾 | DRAM 가격 언제까지 변할까? | 한국은행 ECOS (수출물가지수) |
 
 ## Gemini 촌평 (선택)
 

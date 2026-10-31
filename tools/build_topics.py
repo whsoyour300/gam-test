@@ -693,6 +693,89 @@ topic(
                "내가 사는 곳의 수준을 세계 평균으로 착각하기 쉽습니다."),
     ])
 
+# ── 12. DRAM 가격 ────────────────────────────────────────────────
+# 한국은행 수출물가지수(품목별) DRAM · 달러기준. DRAM 은 달러로 거래되므로
+# 원화기준을 쓰면 환율 변화가 섞인다. 연간 값은 월평균이라 둘이 맞는지 먼저 확인한다.
+_er = load_json("ecos_dram.json")["row"]
+DA = {int(r["TIME"]): float(r["DATA_VALUE"]) for r in _er if len(r["TIME"]) == 4}
+DM = {r["TIME"][:4] + "-" + r["TIME"][4:]: float(r["DATA_VALUE"])
+      for r in _er if len(r["TIME"]) == 6}
+dms = sorted(DM)
+for _a, _b in zip(dms, dms[1:]):
+    _ya, _ma = map(int, _a.split("-"))
+    _yb, _mb = map(int, _b.split("-"))
+    assert _yb * 12 + _mb - (_ya * 12 + _ma) == 1, f"DRAM 월 누락: {_a} → {_b}"
+for _y, _v in DA.items():
+    _ms = [DM[k] for k in dms if k.startswith(f"{_y}-")]
+    if len(_ms) == 12:
+        assert abs(mean(_ms) - _v) / _v < 0.005, f"DRAM {_y} 연간 ≠ 월평균"
+
+d_last_y = max(DA)                               # 연간 값이 있는 마지막 해
+d_years = list(range(d_last_y - 9, d_last_y + 1))
+d_yoy = {y: (DA[y] / DA[y - 1] - 1) * 100 for y in d_years}
+d_up = max(d_yoy, key=d_yoy.get)
+d_down = min(d_yoy, key=d_yoy.get)
+d_ups = [y for y in d_years if d_yoy[y] > 0]
+d_yoy_txt = " · ".join(f"{y} {d_yoy[y]:+.1f}%" for y in d_years)
+
+d_now = dms[-1]
+d_prev = f"{int(d_now[:4]) - 1}{d_now[4:]}"
+d_1y = (DM[d_now] / DM[d_prev] - 1) * 100
+
+# 최근 120개월 안에서 고점 대비 가장 크게 떨어진 폭 (최대 낙폭)
+d_win = dms[-120:]
+_peak, d_dd = d_win[0], (d_win[0], d_win[0], 0.0)
+for k in d_win:
+    if DM[k] > DM[_peak]:
+        _peak = k
+    if (DM[k] / DM[_peak] - 1) * 100 < d_dd[2]:
+        d_dd = (_peak, k, (DM[k] / DM[_peak] - 1) * 100)
+
+
+def ym(k):
+    return f"{k[:4]}년 {int(k[5:])}월"
+
+
+topic(
+    "dram", "💾", "DRAM 가격 언제까지 변할까?",
+    f"한국은행 DRAM 수출물가지수 {d_years[0]}~{d_now[:4]}",
+    "한국은행 ECOS 수출물가지수(품목별) DRAM · 달러기준 (2020=100)",
+    "https://ecos.bok.or.kr/",
+    [
+        slider("d1", f"{d_years[0]}~{d_last_y}년 중 DRAM 가격이 전년보다 가장 많이 "
+               "오른 해, 상승률은 몇 %였을까요?",
+               d_yoy[d_up], "%", 0, 100, 1,
+               f"{d_up}년 연평균 지수 {DA[d_up - 1]:.2f} → {DA[d_up]:.2f}. "
+               f"연도별 전년 대비: {d_yoy_txt}",
+               "가격이 크게 오른 해는 뉴스로 기억되지만, 몇 %였는지는 잘 남지 않습니다."),
+        slider("d2", "같은 10년 동안 가장 크게 떨어진 해, 하락률은 몇 %였을까요?",
+               -d_yoy[d_down], "%", 0, 100, 1,
+               f"{d_down}년 연평균 지수 {DA[d_down - 1]:.2f} → {DA[d_down]:.2f} "
+               f"(하락 폭을 양수로 표시). 연도별 전년 대비: {d_yoy_txt}",
+               "반도체는 오를 때만큼 크게 떨어집니다. 한 해에 절반 가까이 빠지기도 합니다."),
+        slider("d3", f"최근 1년({ym(d_prev)} → {ym(d_now)}) DRAM 가격은 몇 % "
+               "올랐을까요?",
+               d_1y, "%", 0, 400, 10,
+               f"월별 지수 {DM[d_prev]:.2f} → {DM[d_now]:.2f}",
+               "최근 값은 체감보다 훨씬 크게 움직였을 수 있습니다. 최근 몇 달은 "
+               "잠정치라 나중에 고쳐질 수 있습니다."),
+        slider("d4", f"최근 10년({ym(d_win[0])}~{ym(d_now)}) 월별로 보면, 고점에서 "
+               "저점까지 가장 크게 떨어진 비율은?",
+               -d_dd[2], "%", 0, 100, 1,
+               f"{ym(d_dd[0])} 고점 {DM[d_dd[0]]:.2f} → {ym(d_dd[1])} 저점 "
+               f"{DM[d_dd[1]]:.2f}. 월별 지수 120개월에서 각 달을 그 전까지의 "
+               "최고치와 비교한 하락률 중 가장 큰 값",
+               "연평균으로 보면 가려지는 낙폭이 월별로 보면 드러납니다."),
+        slider("d5", f"{d_years[0]}~{d_last_y}년 10년 가운데 DRAM 가격이 전년보다 "
+               "오른 해는 몇 번일까요?",
+               len(d_ups), "번", 0, 10, 1,
+               f"오른 해 {', '.join(map(str, d_ups))}. 연도별 전년 대비: {d_yoy_txt}",
+               "'반도체는 계속 오른다'는 인상과 달리, 오르고 내리기를 반복합니다."),
+    ],
+    caveat="수출물가지수는 국내 기업이 수출하는 DRAM의 계약 가격을 지수로 만든 "
+           "값이라 시장 현물가격과 다를 수 있습니다. 달러기준이라 환율 효과는 빠져 "
+           "있고, 최근 몇 달 값은 잠정치입니다.")
+
 
 # ════════════════════════════════════════════════════════════════
 def main() -> None:

@@ -84,11 +84,13 @@ def choice(qid, text, options, answer, basis, why):
             "answer": answer, "basis": basis, "why": why}
 
 
-def bar_chart(cap, xs, ys, hi=(), ref=None, ref_label=""):
-    """결과 화면의 막대 그래프 — 정답인 항목(hi)만 진하게, ref 는 점선."""
+def bar_chart(cap, xs, ys, hi=(), ref=None, ref_label="", unit="%", signed=True):
+    """결과 화면의 막대 그래프 — 정답인 항목(hi)만 진하게, ref 는 점선.
+    signed=True 면 값 앞에 +를 붙인다(상승률). 수준값(원 등)은 False."""
     return {"kind": "bars", "cap": cap, "x": [str(x) for x in xs],
             "y": [round(v, 1) for v in ys], "hi": [str(h) for h in hi],
-            "ref": None if ref is None else round(ref, 1), "ref_label": ref_label}
+            "ref": None if ref is None else round(ref, 1), "ref_label": ref_label,
+            "unit": unit, "signed": signed}
 
 
 def line_chart(cap, xs, ys, marks):
@@ -313,6 +315,49 @@ def jpykrw():
                "만든 값이라 서울 외환시장 마감 환율이나 수수료가 붙는 은행 매입가와 다르고, "
                "날짜도 ECB 영업일 기준이라 3번의 '2025년 마지막 거래일'이 한국 외환시장 "
                f"기준과 다른 {ymd(d25[0])}입니다.")
+
+    # 결과 화면의 문항별 그래프 — 문항을 센 것과 같은 값을 넣는다.
+    # 일별 선은 너무 촘촘해 n 거래일마다 하나씩만 그리되, 표시할 날은 꼭 넣는다
+    def daily(lo, hi, n, keep):
+        pts = [x for x in D if lo <= x[0] <= hi]
+        return [x for i, x in enumerate(pts) if i % n == 0 or x[0] in keep or i == len(pts) - 1]
+
+    q = TOPICS[-1]["questions"]
+    cap_y = "해마다 전년 대비 변화율(연평균, %)"
+    q[0]["chart"] = bar_chart("연평균 원/100엔(원)", yrs, [A[y] for y in yrs], hi=[top],
+                              unit="원", signed=False)
+    q[1]["chart"] = bar_chart(cap_y, range(2000, 2026), [yoy[y] for y in range(2000, 2026)],
+                              hi=[down])
+    p3 = daily(d20[0], "2025-12-31", 5, {d20[0], d25[0]})
+    q[2]["chart"] = line_chart("2020~2025년 원/100엔(원, 5거래일마다)", [d for d, _ in p3],
+                               [v for _, v in p3],
+                               [(d20[0], "2020년 첫 거래일", "up", "below-right"),
+                                (d25[0], "2025년 마지막 거래일", "down", "above-left")])
+    p4 = daily("1999-01-01", "2025-12-31", 10, {hi_d})
+    q[3]["chart"] = line_chart("1999~2025년 원/100엔(원, 10거래일마다)", [d for d, _ in p4],
+                               [v for _, v in p4], [(hi_d, f"최고 {ymd(hi_d)}", "up", "above")])
+    q[4]["chart"] = bar_chart(cap_y, range(2016, 2026), [yoy[y] for y in range(2016, 2026)])
+
+    # 업계 배경 — 계산이 아니라 시장 설명이다. 글에 적은 해가 계산 결과와 어긋나면 멈춘다
+    assert (top, down, hi_d[:7], ups) == (2012, 2013, "2009-03", [2016, 2019, 2020, 2025]), \
+        "엔화 정답 시점이 바뀌었습니다 — 업계 배경 글을 다시 써야 합니다"
+    q[0]["insight"] = ("2008년 금융위기 뒤 세계 투자자들이 안전자산인 엔화로 몰리며 엔고가 이어졌고, "
+                       "2011년 동일본 대지진 뒤에는 엔/달러가 75엔대까지 내려가 전후 최고 수준의 "
+                       f"엔고가 됐습니다. 그 여파가 남은 {top}년이 연평균으로 가장 비쌌고, "
+                       "그해 말 '아베노믹스' 기대가 나오며 흐름이 꺾였습니다.")
+    q[1]["insight"] = ("2012년 말 출범한 아베 정부와 2013년 4월 일본은행의 대규모 양적·질적 금융완화로 "
+                       f"엔화가 시중에 크게 풀리면서, {down}년 한 해 만에 엔화 가치가 큰 폭으로 "
+                       "떨어졌습니다.")
+    q[2]["insight"] = ("2022년부터 미국 등 주요국이 물가를 잡으려 금리를 빠르게 올렸지만 일본은행은 "
+                       "마이너스 금리를 유지해 금리 차가 크게 벌어졌고, 엔을 빌려 금리가 높은 통화에 "
+                       "투자하는 '엔 캐리 트레이드'가 늘며 엔화가 약해졌습니다. 다만 같은 기간 원화도 "
+                       "달러에 약해져서, 원/100엔으로 본 하락 폭은 엔/달러로 본 것보다 작습니다.")
+    q[3]["insight"] = ("2008년 9월 리먼 브러더스 파산 뒤 위험을 피하려는 돈이 몰려 엔화는 강해진 반면, "
+                       "외국인 자금이 빠져나간 원화는 급락해 원/달러가 2009년 3월 초 1,500원대 "
+                       "후반까지 올랐습니다. 엔고와 원화 약세가 겹친 그때가 꼭짓점이었습니다.")
+    q[4]["insight"] = ("엔화는 세계 경제가 불안할 때 사들이는 안전자산이라 브렉시트 투표(2016년), "
+                       "미·중 무역 분쟁(2019년), 코로나19(2020년)처럼 위험이 커진 해에 올랐습니다. "
+                       "2025년은 일본은행이 금리를 더 올린 데다 원화가 약세를 보인 영향이 겹쳤습니다.")
 
 
 # ── 14. 서울 아파트 ──────────────────────────────────────────────

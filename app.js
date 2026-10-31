@@ -281,14 +281,16 @@ function barChart(c) {
   const lo = Math.min(0, ...c.y), hi = Math.max(0, ...c.y, c.ref ?? 0);
   const y = scaleY(lo, hi), y0 = y(0), h = CH - PAD.t - PAD.b;
   const band = (CW - PAD.l - PAD.r) / c.x.length, w = Math.max(band - 2, 2);
-  const sign = (v) => (v > 0 ? "+" : "") + v;
+  // 상승률은 +를 붙이고 %, 수준값(원 등)은 그대로 — 문항 파일의 unit · signed 를 따른다
+  const unit = c.unit ?? "%", signed = c.signed ?? true;
+  const sign = (v) => (signed && v > 0 ? "+" : "") + v.toLocaleString("ko-KR");
   const marks = c.x.map((yr, i) => {
     const v = c.y[i], x = PAD.l + i * band + (band - w) / 2, top = y(v);
     const on = c.hi.includes(yr), dim = c.hi.length && !on ? " dim" : "";
     const cx = x + w / 2, anchor = cx > CW - 50 ? "end" : cx < PAD.l + 40 ? "start" : "middle";
     const lbl = on ? `<text class="lbl" x="${cx}" y="${v >= 0 ? top - 5 : top + 13}"
-      text-anchor="${anchor}">${yr}년 ${sign(v)}%</text>` : "";
-    return `<g><title>${yr}년 ${sign(v)}%</title>
+      text-anchor="${anchor}">${yr}년 ${sign(v)}${unit}</text>` : "";
+    return `<g><title>${yr}년 ${sign(v)}${unit}</title>
       <rect class="hit" x="${PAD.l + i * band}" y="${PAD.t}" width="${band}" height="${h}"/>
       <path class="${v >= 0 ? "up" : "down"}${dim}" d="${barPath(x, y0, w, top, Math.min(4, w / 2))}"/>${lbl}</g>`;
   }).join("");
@@ -307,19 +309,23 @@ function lineChart(c) {
   const lo = Math.min(...c.y), hi = Math.max(...c.y), pad = (hi - lo) * .08;
   const y = scaleY(lo - pad, hi + pad), h = CH - PAD.t - PAD.b;
   const step = (CW - PAD.l - PAD.r) / (c.x.length - 1), X = (i) => PAD.l + i * step;
-  const ym = (k) => `${k.slice(0, 4)}년 ${+k.slice(5)}월`;
+  const ym = (k) => `${k.slice(0, 4)}년 ${+k.slice(5, 7)}월` + (k.length > 7 ? ` ${+k.slice(8)}일` : "");
   const hits = c.x.map((k, i) => `<rect class="hit" x="${X(i) - step / 2}" y="${PAD.t}"
     width="${step}" height="${h}"><title>${ym(k)} ${c.y[i]}</title></rect>`).join("");
   const pts = c.y.map((v, i) => `${X(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const marks = c.marks.map((m, j) => {
     const i = c.x.indexOf(m.x), cx = X(i), cy = y(c.y[i]);
-    // above = 점 위 가운데, below = 점 아래 왼쪽, above-left = 점 위 왼쪽
-    // 점 뒤로 다시 오르는 선을 피해 글을 왼쪽에 둔다
-    const pos = m.pos || (j ? "below" : "above"), left = pos !== "above";
+    // above = 점 위 가운데, below = 점 아래 왼쪽, above-left = 점 위 왼쪽, below-right = 점 아래 오른쪽
+    // 점 뒤로 다시 오르는 선이나 그래프 가장자리를 피해 글 자리를 고른다
+    const pos = m.pos || (j ? "below" : "above");
+    const left = pos === "below" || pos === "above-left", right = pos === "below-right";
     const low = (m.tone || (j ? "down" : "up")) === "down";
-    const anchor = left ? "end" : cx > CW - 90 ? "end" : cx < PAD.l + 60 ? "start" : "middle";
+    const anchor = left ? "end" : right ? "start"
+      : cx > CW - 90 ? "end" : cx < PAD.l + 60 ? "start" : "middle";
+    const tx = left ? cx + 6 : right ? cx - 6 : cx;
+    const ty = pos.startsWith("below") ? cy + 17 : cy - 10;
     return `<circle class="dot${low ? " low" : ""}" cx="${cx}" cy="${cy}" r="4.5"/>
-      <text class="lbl" x="${left ? cx + 6 : cx}" y="${pos === "below" ? cy + 17 : cy - 10}" text-anchor="${anchor}">${m.label} ${c.y[i]}</text>`;
+      <text class="lbl" x="${tx}" y="${ty}" text-anchor="${anchor}">${m.label} ${c.y[i].toLocaleString("ko-KR")}</text>`;
   }).join("");
   const ticks = [hi, lo].map((v) =>
     `<line class="axis" x1="${PAD.l}" x2="${CW - PAD.r}" y1="${y(v)}" y2="${y(v)}"/>

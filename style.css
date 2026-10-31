@@ -214,6 +214,17 @@ details[open] summary::after { content: " ▴"; }
 /* ── 주제 고르기 ──────────────────────────────── */
 /* 한 줄에 카드 하나 — 왼쪽 동그란 아이콘 · 가운데 글 · 오른쪽 › */
 .grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 10px 0 18px; }
+
+/* 기존 주제는 왼쪽, 새로 올린 주제는 오른쪽 — 좁은 화면에서는 위아래로 쌓는다 */
+.col-head {
+  font-size: 17px; font-weight: 700; color: var(--ink);
+  margin: 22px 2px 0; padding-bottom: 8px; border-bottom: 2px solid var(--line);
+}
+.col-head.new { border-bottom-color: var(--brand); }
+@media (min-width: 760px) {
+  #app.wide { max-width: 940px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+}
 .tcard {
   background: var(--card); border: 1px solid var(--line); color: var(--ink);
   border-radius: 22px; padding: 18px 16px; text-align: left;

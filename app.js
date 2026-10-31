@@ -6,6 +6,8 @@
 
 const $ = (id) => document.getElementById(id);
 const views = { home: $("view-home"), quiz: $("view-quiz"), result: $("view-result") };
+// 첫 저장(11주제) 뒤에 더한 주제 — 시작 화면 오른쪽 칸에 놓는다
+const NEW_TOPICS = new Set(["dram", "jpykrw", "seoul-apt"]);
 
 let INDEX = null;     // topics.json
 let PACK = null;      // 지금 푸는 주제
@@ -67,6 +69,7 @@ function directionOf(q, mine) {
 
 function show(name) {
   Object.entries(views).forEach(([k, el]) => (el.hidden = k !== name));
+  $("app").classList.toggle("wide", name === "home");
   window.scrollTo({ top: 0 });
 }
 
@@ -103,6 +106,7 @@ function renderGrid() {
   $("progress-note").textContent =
     n ? `${INDEX.topics.length}개 중 ${n}개 풀었습니다` : "";
   $("topic-grid").innerHTML = "";
+  $("topic-grid-new").innerHTML = "";
   INDEX.topics.forEach((t) => {
     const b = document.createElement("button");
     b.className = "tcard" + (t.id in done ? " done" : "");
@@ -112,7 +116,7 @@ function renderGrid() {
       `<span class="tblurb">${t.blurb}</span>` +
       (t.id in done ? `<span class="tscore">${done[t.id]}점</span>` : "");
     b.onclick = () => start(t.id);
-    $("topic-grid").appendChild(b);
+    $(NEW_TOPICS.has(t.id) ? "topic-grid-new" : "topic-grid").appendChild(b);
   });
 }
 

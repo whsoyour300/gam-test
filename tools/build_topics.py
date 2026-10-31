@@ -1018,7 +1018,7 @@ def main() -> None:
             old = {}
     io.open(APP / "topics.json", "w", encoding="utf-8").write(json.dumps({
         "title": old.get("title", "감 테스트"),
-        "subtitle": old.get("subtitle", "숫자에 대한 당신의 감은 몇 점입니까"),
+        "subtitle": old.get("subtitle", "당신은 부채 도사입니까!?"),
         # 등급·문구는 여기서 고칩니다. 코드를 건드릴 일이 아닙니다
         "grades": [
             {"min": 90, "name": "촉이 데이터급", "emoji": "🎯"},

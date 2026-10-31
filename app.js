@@ -212,6 +212,7 @@ function renderResult() {
       <p class="react ${hit ? "hit" : pct > 40 ? "miss" : ""}">${reactionOf(q, mine, pct)}</p>
       ${q.type === "choice" ? choiceBody(q, mine) : sliderBody(q, mine)}
       ${q.chart ? chartBody(q.chart) : ""}
+      ${q.insight ? `<p class="insight"><b>업계 배경</b>${q.insight}</p>` : ""}
       <p class="why">💡 ${q.why}</p>
       <details><summary>근거 보기</summary><p class="basis">${q.basis}</p></details>`;
     box.appendChild(el);
@@ -312,10 +313,13 @@ function lineChart(c) {
   const pts = c.y.map((v, i) => `${X(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const marks = c.marks.map((m, j) => {
     const i = c.x.indexOf(m.x), cx = X(i), cy = y(c.y[i]);
-    // 고점은 점 위 가운데, 저점은 점 아래 왼쪽 — 저점 뒤로 다시 오르는 선을 피한다
-    const anchor = j ? "end" : cx > CW - 90 ? "end" : cx < PAD.l + 60 ? "start" : "middle";
-    return `<circle class="dot${j ? " low" : ""}" cx="${cx}" cy="${cy}" r="4.5"/>
-      <text class="lbl" x="${j ? cx + 6 : cx}" y="${j ? cy + 17 : cy - 10}" text-anchor="${anchor}">${m.label} ${c.y[i]}</text>`;
+    // above = 점 위 가운데, below = 점 아래 왼쪽, above-left = 점 위 왼쪽
+    // 점 뒤로 다시 오르는 선을 피해 글을 왼쪽에 둔다
+    const pos = m.pos || (j ? "below" : "above"), left = pos !== "above";
+    const low = (m.tone || (j ? "down" : "up")) === "down";
+    const anchor = left ? "end" : cx > CW - 90 ? "end" : cx < PAD.l + 60 ? "start" : "middle";
+    return `<circle class="dot${low ? " low" : ""}" cx="${cx}" cy="${cy}" r="4.5"/>
+      <text class="lbl" x="${left ? cx + 6 : cx}" y="${pos === "below" ? cy + 17 : cy - 10}" text-anchor="${anchor}">${m.label} ${c.y[i]}</text>`;
   }).join("");
   const ticks = [hi, lo].map((v) =>
     `<line class="axis" x1="${PAD.l}" x2="${CW - PAD.r}" y1="${y(v)}" y2="${y(v)}"/>

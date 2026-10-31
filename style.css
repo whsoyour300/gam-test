@@ -47,6 +47,7 @@ html, body {
 h1 { font-size: 30px; line-height: 1.25; margin: 6px 0 4px; letter-spacing: -.5px; }
 .hero h1 {
   font-size: 40px; font-weight: 500; letter-spacing: -1px; margin: 18px 0 10px;
+  text-wrap: balance; word-break: keep-all;
 }
 .hero #subtitle { font-size: 15.5px; margin: 0; }
 h2 { font-size: 21px; line-height: 1.4; margin: 6px 0 22px; letter-spacing: -.3px; }
@@ -201,7 +202,10 @@ input[type=range]::-moz-range-thumb {
 .chart figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
-.chart .lbl { fill: var(--ink); font-weight: 700; }
+.chart .lbl {
+  fill: var(--ink); font-weight: 700;
+  paint-order: stroke; stroke: var(--card); stroke-width: 3px; stroke-linejoin: round;
+}
 .chart .up { fill: var(--brand); }
 .chart .down { fill: var(--miss); }
 .chart .dim { opacity: .3; }
@@ -213,6 +217,13 @@ input[type=range]::-moz-range-thumb {
 .chart .line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; pointer-events: none; }
 .chart .dot { fill: var(--brand); stroke: var(--card); stroke-width: 2; pointer-events: none; }
 .chart .dot.low { fill: var(--miss); }
+
+/* 업계 배경 — 계산이 아니라 그 숫자가 나온 시장 사정 */
+.insight {
+  font-size: 13.5px; line-height: 1.65; background: var(--tint);
+  border-radius: 12px; padding: 11px 13px; margin: 0 0 12px;
+}
+.insight b { display: block; font-size: 12px; color: var(--brand); margin-bottom: 2px; }
 
 /* 근거 · 해설 */
 .why { font-size: 13.5px; color: var(--ink); opacity: .92; margin: 0 0 10px; }

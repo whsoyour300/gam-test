@@ -84,6 +84,19 @@ def choice(qid, text, options, answer, basis, why):
             "answer": answer, "basis": basis, "why": why}
 
 
+def bar_chart(cap, xs, ys, hi=(), ref=None, ref_label=""):
+    """결과 화면의 막대 그래프 — 정답인 항목(hi)만 진하게, ref 는 점선."""
+    return {"kind": "bars", "cap": cap, "x": [str(x) for x in xs],
+            "y": [round(v, 1) for v in ys], "hi": [str(h) for h in hi],
+            "ref": None if ref is None else round(ref, 1), "ref_label": ref_label}
+
+
+def line_chart(cap, xs, ys, marks):
+    """결과 화면의 선 그래프 — marks = [(x, 글, 'up'|'down', 'above'|'below'), …]"""
+    return {"kind": "line", "cap": cap, "x": list(xs), "y": [round(v, 2) for v in ys],
+            "marks": [{"x": x, "label": l, "tone": t, "pos": p} for x, l, t, p in marks]}
+
+
 def write_pack(t):
     """topics/<id>.json 을 쓰고, topics.json 목록에 넣을 한 줄을 돌려준다."""
     pack = {k: t[k] for k in ("id", "emoji", "title", "blurb",
@@ -124,8 +137,8 @@ def dram():
     ups = [y for y in yrs if yoy[y] > 0]
 
     now = ms[-1]
-    prev = f"{int(now[:4]) - 1}{now[4:]}"
-    r1y = (M[now] / M[prev] - 1) * 100
+    prev = f"{int(now[:4]) - 3}{now[4:]}"          # 3년 전 같은 달
+    r3y = (M[now] / M[prev] - 1) * 100
 
     win = ms[-120:]
     peak, dd = win[0], (win[0], win[0], 0.0)
@@ -162,9 +175,9 @@ def dram():
                    f"가장 작은 해를 골라 하락 폭을 양수로 적었고, {down}년 "
                    f"{A[down - 1]:.2f} → {A[down]:.2f} 입니다.",
                    "반도체는 오를 때만큼 크게 떨어집니다. 한 해에 절반 가까이 빠지기도 합니다."),
-            slider("d3", f"최근 1년({ym(prev)} → {ym(now)}) 동안 DRAM 수출가격은 "
+            slider("d3", f"최근 3년({ym(prev)} → {ym(now)}) 동안 DRAM 수출가격은 "
                    "몇 % 올랐을까요?",
-                   r1y, "%", 0, 400, 10,
+                   r3y, "%", 0, 1000, 10,
                    f"{idx}의 {ym(prev)}과 {ym(now)} 월별 값 {M[prev]:.2f} → {M[now]:.2f} 를 "
                    "(나중 ÷ 처음 − 1) × 100 으로 비교했습니다.",
                    "최근 값은 체감보다 훨씬 크게 움직였을 수 있습니다. 최근 몇 달은 "
@@ -189,6 +202,45 @@ def dram():
                "이어지는데 계약이 없거나 자료를 못 받은 달에 직전 가격을 이어 쓴 것일 수 "
                f"있으며, 가장 최근 {ym(now)} 값은 잠정치라 다음 달 발표 때 고쳐질 수 "
                "있습니다.")
+
+    # 결과 화면의 문항별 그래프 — 문항을 센 것과 같은 값을 넣는다
+    q = TOPICS[-1]["questions"]
+    cap_y = "해마다 전년 대비 상승률(연평균, %)"
+    q[0]["chart"] = bar_chart(cap_y, yrs, [yoy[y] for y in yrs], hi=[up])
+    q[1]["chart"] = bar_chart(cap_y, yrs, [yoy[y] for y in yrs], hi=[down])
+    near = ms[-48:]
+    q[2]["chart"] = line_chart("최근 4년 월별 수출물가지수", near, [M[k] for k in near],
+                               [(prev, f"3년 전 {ym(prev)}", "up", "above"),
+                                (now, f"{ym(now)}", "up", "below")])
+    q[3]["chart"] = line_chart("최근 10년 월별 수출물가지수", win, [M[k] for k in win],
+                               [(dd[0], f"고점 {ym(dd[0])}", "up", "above"),
+                                (dd[1], f"저점 {ym(dd[1])}", "down", "below")])
+    q[4]["chart"] = bar_chart(cap_y, yrs, [yoy[y] for y in yrs])
+
+    # 업계 배경 — 계산이 아니라 시장 설명이다. 글에 적은 해가 계산 결과와 어긋나면 멈춘다
+    assert (up, down, dd[0][:4], dd[1][:7], prev[:4]) == (2017, 2019, "2018", "2023-08", "2023"), \
+        "DRAM 정답 시점이 바뀌었습니다 — 업계 배경 글을 다시 써야 합니다"
+    q[0]["insight"] = (f"{up}년은 클라우드 데이터센터의 서버 증설과 스마트폰 메모리 탑재량 증가로 "
+                       "수요가 늘었는데, 미세공정 전환이 어려워져 공급이 따라가지 못한 "
+                       "'슈퍼사이클'의 첫해였습니다.")
+    q[1]["insight"] = (f"호황 때 늘린 생산이 쏟아지던 {down}년, 데이터센터 고객사들이 쌓아 둔 재고를 "
+                       "먼저 소진하며 주문을 줄였고(재고 조정) 미·중 무역 갈등까지 겹쳤습니다. "
+                       "삼성전자·SK하이닉스·마이크론이 연초부터 투자를 줄였지만 이미 늘어난 공급을 "
+                       "되돌리지 못했습니다.")
+    q[2]["insight"] = (f"{ym(prev)}은 2023년 감산 직후의 바닥 근처였습니다. 그 뒤 제조사 감산으로 재고가 "
+                       "줄어든 데다 AI 데이터센터 수요로 고대역폭메모리(HBM) 생산이 급증했고, HBM은 "
+                       "같은 용량에 웨이퍼를 더 많이 써서 일반 DRAM 생산 능력이 줄었습니다. 시장조사업체 "
+                       "TrendForce는 2026년 1분기 일반 DRAM 계약가격이 전 분기보다 90~95% 올라 "
+                       "분기 기준 사상 최대 상승이 될 것으로 봤습니다.")
+    q[3]["insight"] = (f"{ym(dd[0])} 고점 뒤 2019년 재고 조정으로 한 번 꺾였고, 코로나 특수가 끝난 "
+                       "2022년부터 PC·스마트폰 수요가 줄고 금리 인상으로 소비가 움츠러들며 다시 "
+                       "떨어졌습니다. 2023년 4월 삼성전자가 외환위기 이후 처음으로 감산을 공식화하고 "
+                       "SK하이닉스·마이크론도 생산과 투자를 줄인 뒤 "
+                       f"{ym(dd[1])}에 바닥을 찍었습니다.")
+    q[4]["insight"] = ("DRAM은 소수 업체가 몇 년 단위로 공장을 늘리는 산업이라, 호황 때 늘린 투자가 "
+                       "1~2년 뒤 공급 과잉이 되는 '실리콘 사이클'이 반복됩니다. 2017·2018년 서버 호황 → "
+                       "2019·2020년 하락 → 2021년 코로나 특수 → 2022·2023년 하락 → 2024·2025년 감산과 "
+                       "AI 수요로 회복의 흐름입니다.")
 
 
 # ── 13. 엔화 ─────────────────────────────────────────────────────
@@ -1040,8 +1092,8 @@ def main() -> None:
         except ValueError:
             old = {}
     io.open(APP / "topics.json", "w", encoding="utf-8").write(json.dumps({
-        "title": old.get("title", "감 테스트"),
-        "subtitle": old.get("subtitle", "당신은 부채 도사입니까!?"),
+        "title": old.get("title", "더 이상 감에 의존할 수 없다!"),
+        "subtitle": old.get("subtitle", "당신은 부채 도사가 아닙니다. 전문가로 만들어 드립니다."),
         # 등급·문구는 여기서 고칩니다. 코드를 건드릴 일이 아닙니다
         "grades": [
             {"min": 90, "name": "촉이 데이터급", "emoji": "🎯"},

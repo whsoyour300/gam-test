@@ -211,6 +211,7 @@ function renderResult() {
       <h3>${q.text}</h3>
       <p class="react ${hit ? "hit" : pct > 40 ? "miss" : ""}">${reactionOf(q, mine, pct)}</p>
       ${q.type === "choice" ? choiceBody(q, mine) : sliderBody(q, mine)}
+      ${q.chart ? chartBody(q.chart) : ""}
       <p class="why">💡 ${q.why}</p>
       <details><summary>근거 보기</summary><p class="basis">${q.basis}</p></details>`;
     box.appendChild(el);
@@ -253,6 +254,76 @@ function sliderBody(q, mine) {
       <span class="live" data-left="${pos(q, q.answer)}" style="left:${pos(q, mine)}%"></span>
     </div>
     <div class="rows">${bars}</div>`;
+}
+
+/* ── 문항 그래프 — 문항 파일의 chart 를 SVG 로 그린다 ──────── */
+const CW = 400, CH = 180, PAD = { l: 34, r: 8, t: 16, b: 34 };
+
+function chartBody(c) {
+  return `<figure class="chart"><figcaption>${c.cap}</figcaption>` +
+    (c.kind === "line" ? lineChart(c) : barChart(c)) + `</figure>`;
+}
+
+function scaleY(lo, hi) {
+  return (v) => PAD.t + (hi - v) / (hi - lo) * (CH - PAD.t - PAD.b);
+}
+
+// 막대 — 바닥(0)에 붙은 쪽은 각지고, 값 쪽 끝만 둥글다
+function barPath(x, y0, w, top, r) {
+  r = Math.min(r, Math.abs(y0 - top));
+  const s = top < y0 ? 1 : -1;
+  return `M${x},${y0} V${top + s * r} Q${x},${top} ${x + r},${top} ` +
+    `H${x + w - r} Q${x + w},${top} ${x + w},${top + s * r} V${y0} Z`;
+}
+
+function barChart(c) {
+  const lo = Math.min(0, ...c.y), hi = Math.max(0, ...c.y, c.ref ?? 0);
+  const y = scaleY(lo, hi), y0 = y(0), h = CH - PAD.t - PAD.b;
+  const band = (CW - PAD.l - PAD.r) / c.x.length, w = Math.max(band - 2, 2);
+  const sign = (v) => (v > 0 ? "+" : "") + v;
+  const marks = c.x.map((yr, i) => {
+    const v = c.y[i], x = PAD.l + i * band + (band - w) / 2, top = y(v);
+    const on = c.hi.includes(yr), dim = c.hi.length && !on ? " dim" : "";
+    const cx = x + w / 2, anchor = cx > CW - 50 ? "end" : cx < PAD.l + 40 ? "start" : "middle";
+    const lbl = on ? `<text class="lbl" x="${cx}" y="${v >= 0 ? top - 5 : top + 13}"
+      text-anchor="${anchor}">${yr}년 ${sign(v)}%</text>` : "";
+    return `<g><title>${yr}년 ${sign(v)}%</title>
+      <rect class="hit" x="${PAD.l + i * band}" y="${PAD.t}" width="${band}" height="${h}"/>
+      <path class="${v >= 0 ? "up" : "down"}${dim}" d="${barPath(x, y0, w, top, Math.min(4, w / 2))}"/>${lbl}</g>`;
+  }).join("");
+  const ticks = [...new Set([hi, 0, lo])].map((v) =>
+    `<line class="${v ? "axis" : "base"}" x1="${PAD.l}" x2="${CW - PAD.r}" y1="${y(v)}" y2="${y(v)}"/>
+     <text x="${PAD.l - 5}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`).join("");
+  const ref = c.ref == null ? "" :
+    `<line class="ref" x1="${PAD.l}" x2="${CW - PAD.r}" y1="${y(c.ref)}" y2="${y(c.ref)}"/>
+     <text class="lbl" x="${PAD.l + 4}" y="${y(c.ref) - 5}">${c.ref_label}</text>`;
+  const xl = [0, c.x.length - 1].map((i) => `<text x="${PAD.l + (i + .5) * band}" y="${CH - 6}"
+    text-anchor="${i ? "end" : "start"}">${c.x[i]}</text>`).join("");
+  return `<svg viewBox="0 0 ${CW} ${CH}" role="img" aria-label="${c.cap}">${ticks}${marks}${ref}${xl}</svg>`;
+}
+
+function lineChart(c) {
+  const lo = Math.min(...c.y), hi = Math.max(...c.y), pad = (hi - lo) * .08;
+  const y = scaleY(lo - pad, hi + pad), h = CH - PAD.t - PAD.b;
+  const step = (CW - PAD.l - PAD.r) / (c.x.length - 1), X = (i) => PAD.l + i * step;
+  const ym = (k) => `${k.slice(0, 4)}년 ${+k.slice(5)}월`;
+  const hits = c.x.map((k, i) => `<rect class="hit" x="${X(i) - step / 2}" y="${PAD.t}"
+    width="${step}" height="${h}"><title>${ym(k)} ${c.y[i]}</title></rect>`).join("");
+  const pts = c.y.map((v, i) => `${X(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const marks = c.marks.map((m, j) => {
+    const i = c.x.indexOf(m.x), cx = X(i), cy = y(c.y[i]);
+    // 고점은 점 위 가운데, 저점은 점 아래 왼쪽 — 저점 뒤로 다시 오르는 선을 피한다
+    const anchor = j ? "end" : cx > CW - 90 ? "end" : cx < PAD.l + 60 ? "start" : "middle";
+    return `<circle class="dot${j ? " low" : ""}" cx="${cx}" cy="${cy}" r="4.5"/>
+      <text class="lbl" x="${j ? cx + 6 : cx}" y="${j ? cy + 17 : cy - 10}" text-anchor="${anchor}">${m.label} ${c.y[i]}</text>`;
+  }).join("");
+  const ticks = [hi, lo].map((v) =>
+    `<line class="axis" x1="${PAD.l}" x2="${CW - PAD.r}" y1="${y(v)}" y2="${y(v)}"/>
+     <text x="${PAD.l - 5}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`).join("");
+  const xl = [0, c.x.length - 1].map((i) => `<text x="${X(i)}" y="${CH - 6}"
+    text-anchor="${i ? "end" : "start"}">${c.x[i].slice(0, 4)}</text>`).join("");
+  return `<svg viewBox="0 0 ${CW} ${CH}" role="img" aria-label="${c.cap}">${ticks}${hits}
+    <polyline class="line" points="${pts}"/>${marks}${xl}</svg>`;
 }
 
 function animate() {

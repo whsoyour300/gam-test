@@ -360,6 +360,22 @@ def seoul_apt():
                f"{flat[0][:4]}~{flat[-1][:4]}년에는 앞 달과 같은 값이 이어진 달이 {len(flat)}번 "
                "있어 이른 시기의 값은 조사가 거칠었거나 직전 시세를 이어 쓴 것일 수 있습니다.")
 
+    # 결과 화면의 문항별 그래프 — 문항을 센 것과 같은 값을 넣는다
+    def bars(years, hi=(), ref=None, ref_label=""):
+        return {"kind": "bars", "cap": "해마다 전년 12월 대비 상승률(%)",
+                "x": [str(y) for y in years], "y": [round(yoy[y], 1) for y in years],
+                "hi": [str(y) for y in hi], "ref": ref and round(ref, 1), "ref_label": ref_label}
+
+    q = TOPICS[-1]["questions"]
+    q[0]["chart"] = bars(range(2010, 2026), ref=avg10, ref_label=f"평균 {avg10:.1f}%")
+    q[1]["chart"] = bars(y00, hi=[down])
+    q[2]["chart"] = bars(y00, hi=[top])
+    q[3]["chart"] = bars(y00)
+    q[4]["chart"] = {"kind": "line", "cap": "월별 매매가격지수",
+                     "x": win, "y": [round(M[k], 2) for k in win],
+                     "marks": [{"x": dd[0], "label": f"고점 {ym(dd[0])}"},
+                               {"x": dd[1], "label": f"저점 {ym(dd[1])}"}]}
+
 
 # ── 한 주제만 다시 쓰기 ──────────────────────────────────────────
 #   python tools/build_topics.py --only dram

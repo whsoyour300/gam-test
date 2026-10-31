@@ -196,6 +196,24 @@ input[type=range]::-moz-range-thumb {
   transition: left 1s cubic-bezier(.22,1,.36,1);
 }
 
+/* 문항 그래프 — 오른 해는 초록, 떨어진 해는 빨강, 정답인 해만 진하게 */
+.chart { margin: 4px 0 14px; }
+.chart figcaption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .lbl { fill: var(--ink); font-weight: 700; }
+.chart .up { fill: var(--brand); }
+.chart .down { fill: var(--miss); }
+.chart .dim { opacity: .3; }
+.chart .hit { fill: transparent; }
+.chart g:hover .hit, .chart .hit:hover { fill: var(--tint); }
+.chart .axis { stroke: var(--line); }
+.chart .base { stroke: var(--muted); }
+.chart .ref { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.chart .line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; pointer-events: none; }
+.chart .dot { fill: var(--brand); stroke: var(--card); stroke-width: 2; pointer-events: none; }
+.chart .dot.low { fill: var(--miss); }
+
 /* 근거 · 해설 */
 .why { font-size: 13.5px; color: var(--ink); opacity: .92; margin: 0 0 10px; }
 details { border-top: 1px solid var(--line); padding-top: 10px; }
